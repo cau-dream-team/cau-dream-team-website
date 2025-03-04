@@ -4,12 +4,20 @@
 
 ### Scripts
 
+#### Setup
+
 ```shell
-pnpm dev    # Starts the development server with Turbopack
+pnpm install  # Installs all dependencies for the project
+```
 
-pnpm build  # Builds the application for production
+#### Dev
 
-pnpm start  # Starts the production server
+```shell
+pnpm dev      # Starts the development server with Turbopack
 
-pnpm lint   # Checks the code with ESLint
+pnpm build    # Builds the application for production
+
+pnpm start    # Starts the production server
+
+pnpm lint     # Checks the code with ESLint
 ```

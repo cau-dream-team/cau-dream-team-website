@@ -17,7 +17,7 @@ jobs:
 
       #- name: Fetch latest notes
       #  run: |
-      #    git clone https://github.com/cau-dev-team/notes.git notes
+      #    git clone https://github.com/cau-dream-team/notes.git notes
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
@@ -39,6 +39,6 @@ jobs:
         uses: peaceiris/actions-gh-pages@v4
         with:
           deploy_key: ${{ secrets.DEPLOY_KEY }}
-          external_repository: cau-dev-team/cau-dev-team.github.io
+          external_repository: cau-dream-team/cau-dream-team.github.io
           publish_dir: ./out
           publish_branch: main
