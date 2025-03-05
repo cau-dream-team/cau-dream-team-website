@@ -35,7 +35,17 @@ jobs:
       - name: Download artifacts
         run: |
           set -e
-          for instance in ${{ join(fromJSON(github.event.client_payload.artifact_names), ' ') }}; do
+          # Safely parse the JSON array of artifact names
+          ARTIFACTS="${{ toJSON(github.event.client_payload.artifact_names) }}"
+
+          # Check if ARTIFACTS is valid JSON
+          if ! echo "$ARTIFACTS" | jq empty 2>/dev/null; then
+            echo "::error::Invalid JSON in artifact_names"
+            exit 1
+          fi
+
+          # Process each artifact
+          for instance in $(echo "$ARTIFACTS" | jq -r '.[]'); do
             echo "::group::Downloading artifact for $instance"
             # Create a temporary directory for each artifact
             mkdir -p temp_$instance
@@ -249,33 +259,3 @@ jobs:
           publish_dir: ./out
           publish_branch: main
           commit_message: ${{ github.event_name == 'repository_dispatch' && 'Update course notes' || 'Update website from main branch' }}
-
-  notify:
-    name: Send Notification
-    needs: [deploy]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - name: Check workflow status
-        id: status
-        run: |
-          if [ "${{ needs.deploy.result }}" == "success" ]; then
-            echo "STATUS=success" >> $GITHUB_OUTPUT
-            echo "MESSAGE=✅ Website deployment completed successfully" >> $GITHUB_OUTPUT
-          else
-            echo "STATUS=failure" >> $GITHUB_OUTPUT
-            echo "MESSAGE=❌ Website deployment failed" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create GitHub Issue on Failure
-        if: steps.status.outputs.STATUS == 'failure'
-        uses: actions/github-script@v7
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          script: |
-            github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: `Deployment failed: ${context.workflow}`,
-              body: `Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
-            })
