@@ -34,10 +34,14 @@ jobs:
 
       - name: Download artifacts
         run: |
-          # For each artifact name in the payload
-          echo ">> Starting to download artifacts: ${{ github.event.client_payload.artifact_names }}"
-          for artifact_name in $(echo '${{ github.event.client_payload.artifact_names }}' | jq -r '.[]'); do
-            echo ">> Artifact name: $artifact_name"
+          echo ">> Starting to download artifacts"
+
+          # Parse the JSON array directly from the client payload
+          artifact_names='${{ toJson(github.event.client_payload.artifact_names) }}'
+          echo ">> Artifact names: $artifact_names"
+
+          for artifact_name in $(echo "$artifact_names" | jq -r '.[]'); do
+            echo ">> Processing artifact: $artifact_name"
 
             # Convert to uppercase for the zip file name
             INSTANCE_ID_UPPER=$(echo "$artifact_name" | tr '[:lower:]' '[:upper:]')
