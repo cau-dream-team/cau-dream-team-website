@@ -5,24 +5,38 @@ on:
     branches: ['main']
   repository_dispatch:
     types: [update_notes]
+  workflow_dispatch:
+    inputs:
+      deploy_only:
+        description: 'Skip build and deploy only'
+        type: 'boolean'
+        default: false
+        required: false
 
 env:
   COURSE_DIR: public/courses
+  NODE_VERSION: 20
+  PNPM_VERSION: 9
 
 jobs:
   download_artifacts:
+    name: Download Course Artifacts
     runs-on: ubuntu-latest
     if: github.event_name == 'repository_dispatch'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Create notes directory
         run: mkdir -p ${{ env.COURSE_DIR }}
 
       - name: Download artifacts
         run: |
+          set -e
           for instance in ${{ join(fromJSON(github.event.client_payload.artifact_names), ' ') }}; do
-            echo "Downloading artifact for $instance"
+            echo "::group::Downloading artifact for $instance"
             # Create a temporary directory for each artifact
             mkdir -p temp_$instance
 
@@ -30,11 +44,23 @@ jobs:
             WORKFLOW_ID=$(curl -s -H "Authorization: token ${{ secrets.REPO_ACCESS_TOKEN }}" \
               "https://api.github.com/repos/cau-dream-team/cau-dream-team-notes/actions/workflows/build-and-trigger.yml/runs?status=completed&branch=main&per_page=1" \
               | jq -r '.workflow_runs[0].id')
+            
+            if [ -z "$WORKFLOW_ID" ] || [ "$WORKFLOW_ID" = "null" ]; then
+              echo "::error::Failed to get workflow ID for cau-dream-team-notes repository"
+              exit 1
+            fi
+
+            echo "Found workflow ID: $WORKFLOW_ID"
 
             # Download the artifact for this instance
             curl -s -L -H "Authorization: token ${{ secrets.REPO_ACCESS_TOKEN }}" \
               -o temp_$instance/artifact.zip \
               "https://api.github.com/repos/cau-dream-team/cau-dream-team-notes/actions/runs/$WORKFLOW_ID/artifacts/$instance/zip"
+            
+            if [ ! -s "temp_$instance/artifact.zip" ]; then
+              echo "::error::Failed to download artifact for $instance"
+              exit 1
+            fi
 
             # Extract the artifact to the notes directory
             unzip -q temp_$instance/artifact.zip -d temp_$instance
@@ -42,11 +68,15 @@ jobs:
             # Find the main content zip file and extract it
             MAIN_ZIP=$(find temp_$instance -name "webHelp*.zip" -type f)
             if [ -n "$MAIN_ZIP" ]; then
+              echo "Extracting $MAIN_ZIP to ${{ env.COURSE_DIR }}/$instance"
               unzip -q "$MAIN_ZIP" -d ${{ env.COURSE_DIR }}/$instance
+            else
+              echo "::warning::No webHelp*.zip file found in artifact for $instance"
             fi
 
             # Clean up temporary directory
             rm -rf temp_$instance
+            echo "::endgroup::"
           done
 
       - name: Upload notes directory
@@ -57,10 +87,14 @@ jobs:
           retention-days: 1
 
   setup_build_directory:
+    name: Setup Build Directory
     runs-on: ubuntu-latest
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Create empty notes directory
         run: mkdir -p ${{ env.COURSE_DIR }}
@@ -72,12 +106,63 @@ jobs:
           path: ${{ env.COURSE_DIR }}
           retention-days: 1
 
+  lint:
+    name: Lint Code
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.deploy_only)
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
+
+      - name: Install dependencies
+        run: pnpm install
+
+      - name: Run linting
+        run: pnpm lint
+
   build:
-    needs: [download_artifacts, setup_build_directory]
-    if: always() && (needs.download_artifacts.result == 'success' || needs.download_artifacts.result == 'skipped') && (needs.setup_build_directory.result == 'success' || needs.setup_build_directory.result == 'skipped')
+    name: Build Website
+    needs: [download_artifacts, setup_build_directory, lint]
+    if: |
+      always() && 
+      (needs.download_artifacts.result == 'success' || needs.download_artifacts.result == 'skipped') && 
+      (needs.setup_build_directory.result == 'success' || needs.setup_build_directory.result == 'skipped') &&
+      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
+      (github.event_name != 'workflow_dispatch' || !inputs.deploy_only)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
 
       - name: Download notes directory
         uses: actions/download-artifact@v4
@@ -86,14 +171,30 @@ jobs:
           path: ${{ env.COURSE_DIR }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v2
         with:
-          version: 9
+          version: ${{ env.PNPM_VERSION }}
+          run_install: false
+
+      - name: Get pnpm store directory
+        id: pnpm-cache
+        shell: bash
+        run: |
+          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+
+      - name: Setup pnpm cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
+          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
         run: pnpm install
@@ -109,16 +210,36 @@ jobs:
           retention-days: 1
 
   deploy:
+    name: Deploy to GitHub Pages
     needs: build
+    if: |
+      always() && 
+      (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.deploy_only))
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - name: Checkout repository
+        if: github.event_name == 'workflow_dispatch' && inputs.deploy_only
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
       - name: Download build output
+        if: github.event_name != 'workflow_dispatch' || !inputs.deploy_only
         uses: actions/download-artifact@v4
         with:
           name: build-output
           path: ./out
+
+      - name: Download previous build
+        if: github.event_name == 'workflow_dispatch' && inputs.deploy_only
+        uses: actions/checkout@v4
+        with:
+          repository: cau-dream-team/cau-dream-team.github.io
+          ssh-key: ${{ secrets.DEPLOY_KEY }}
+          path: ./out
+          fetch-depth: 1
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
@@ -127,3 +248,34 @@ jobs:
           external_repository: cau-dream-team/cau-dream-team.github.io
           publish_dir: ./out
           publish_branch: main
+          commit_message: ${{ github.event_name == 'repository_dispatch' && 'Update course notes' || 'Update website from main branch' }}
+
+  notify:
+    name: Send Notification
+    needs: [deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check workflow status
+        id: status
+        run: |
+          if [ "${{ needs.deploy.result }}" == "success" ]; then
+            echo "STATUS=success" >> $GITHUB_OUTPUT
+            echo "MESSAGE=✅ Website deployment completed successfully" >> $GITHUB_OUTPUT
+          else
+            echo "STATUS=failure" >> $GITHUB_OUTPUT
+            echo "MESSAGE=❌ Website deployment failed" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Issue on Failure
+        if: steps.status.outputs.STATUS == 'failure'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Deployment failed: ${context.workflow}`,
+              body: `Workflow run: ${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`
+            })
