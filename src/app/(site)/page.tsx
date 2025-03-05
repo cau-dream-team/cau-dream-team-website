@@ -7,7 +7,7 @@ import { Moon, Sun } from 'lucide-react';
 import { useTheme, type UseThemeProps } from 'next-themes';
 import { useState } from 'react';
 
-export default function Home() {
+const RootPage = () => {
   const { theme, setTheme }: UseThemeProps = useTheme();
 
   const [inputValue, setInputValue] = useState<string>('');
@@ -38,4 +38,6 @@ export default function Home() {
       </Button>
     </>
   );
-}
+};
+
+export default RootPage;
