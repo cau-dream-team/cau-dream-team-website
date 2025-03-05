@@ -34,69 +34,28 @@ jobs:
 
       - name: Download artifacts
         run: |
-          set -e
+          # For each artifact name in the payload
+          for artifact_name in $(echo '${{ github.event.client_payload.artifact_names }}' | jq -r '.[]'); do
+            # Convert to uppercase for the zip file name
+            INSTANCE_ID_UPPER=$(echo "$artifact_name" | tr '[:lower:]' '[:upper:]')
 
-          echo "Client payload: ${{ toJSON(github.event.client_payload) }}"
+            # Create temporary directory for this artifact
+            mkdir -p "temp_$artifact_name"
 
-          # Get the artifact names
-          for instance in $(echo '${{ toJSON(github.event.client_payload.artifact_names) }}' | jq -r '.[]'); do
-            echo "::group::Downloading artifact for $instance"
-            # Create a temporary directory for each artifact
-            mkdir -p temp_$instance
+            # Download the artifact
+            gh release download --repo cau-dream-team/cau-dream-team-notes --pattern "$artifact_name.zip" --dir "temp_$artifact_name"
 
-            # Use GitHub API to get the latest workflow run ID from the source repository
-            WORKFLOW_ID=$(curl -s -H "Authorization: token ${{ secrets.REPO_ACCESS_TOKEN }}" \
-              "https://api.github.com/repos/cau-dream-team/cau-dream-team-notes/actions/workflows/build-and-trigger.yml/runs?status=completed&branch=main&per_page=1" \
-              | jq -r '.workflow_runs[0].id')
-            
-            if [ -z "$WORKFLOW_ID" ] || [ "$WORKFLOW_ID" = "null" ]; then
-              echo "::error::Failed to get workflow ID for cau-dream-team-notes repository"
-              exit 1
-            fi
+            # Extract the main artifact zip
+            unzip -q "temp_$artifact_name/$artifact_name.zip" -d "temp_$artifact_name"
 
-            echo "Found workflow ID: $WORKFLOW_ID"
+            # Extract the webHelp zip
+            unzip -q "temp_$artifact_name/artifacts/webHelp${INSTANCE_ID_UPPER}2-all.zip" -d "${{ env.COURSE_DIR }}/$artifact_name"
 
-            # Get artifact information for this workflow run
-            ARTIFACTS_JSON=$(curl -s -H "Authorization: token ${{ secrets.REPO_ACCESS_TOKEN }}" \
-              "https://api.github.com/repos/cau-dream-team/cau-dream-team-notes/actions/runs/$WORKFLOW_ID/artifacts")
-            
-            # Find the artifact ID for this instance
-            ARTIFACT_ID=$(echo "$ARTIFACTS_JSON" | jq -r --arg name "$instance" '.artifacts[] | select(.name==$name) | .id')
-            
-            if [ -z "$ARTIFACT_ID" ] || [ "$ARTIFACT_ID" = "null" ]; then
-              echo "::error::Failed to find artifact ID for instance $instance in workflow $WORKFLOW_ID"
-              echo "Available artifacts: $(echo "$ARTIFACTS_JSON" | jq -r '.artifacts[].name')"
-              exit 1
-            fi
-            
-            echo "Found artifact ID: $ARTIFACT_ID for instance $instance"
-
-            # Download the artifact for this instance
-            curl -s -L -H "Authorization: token ${{ secrets.REPO_ACCESS_TOKEN }}" \
-              -o temp_$instance/artifact.zip \
-              "https://api.github.com/repos/cau-dream-team/cau-dream-team-notes/actions/runs/$WORKFLOW_ID/artifacts/$ARTIFACT_ID/zip"
-            
-            if [ ! -s "temp_$instance/artifact.zip" ]; then
-              echo "::error::Failed to download artifact for $instance"
-              exit 1
-            fi
-
-            # Extract the artifact to the notes directory
-            unzip -q temp_$instance/artifact.zip -d temp_$instance
-
-            # Find the main content zip file and extract it
-            MAIN_ZIP=$(find temp_$instance -name "webHelp*.zip" -type f)
-            if [ -n "$MAIN_ZIP" ]; then
-              echo "Extracting $MAIN_ZIP to ${{ env.COURSE_DIR }}/$instance"
-              unzip -q "$MAIN_ZIP" -d ${{ env.COURSE_DIR }}/$instance
-            else
-              echo "::warning::No webHelp*.zip file found in artifact for $instance"
-            fi
-
-            # Clean up temporary directory
-            rm -rf temp_$instance
-            echo "::endgroup::"
+            # Cleanup temporary files
+            rm -rf "temp_$artifact_name"
           done
+        env:
+          GH_TOKEN: ${{ github.token }}
 
       - name: Upload notes directory
         uses: actions/upload-artifact@v4
@@ -107,7 +66,7 @@ jobs:
 
   setup_build_directory:
     name: Setup Build Directory
-    if: github.event_name != 'repository_dispatch'
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -161,16 +120,14 @@ jobs:
       - name: Get pnpm store directory
         id: pnpm-cache
         shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
+        run: echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
 
       - name: Setup pnpm cache
         uses: actions/cache@v4
         with:
           path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
           key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
+          restore-keys: ${{ runner.os }}-pnpm-store-
 
       - name: Install dependencies
         run: pnpm install
@@ -188,9 +145,7 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
-    if: |
-      always() && 
-      (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.deploy_only))
+    if: always() && (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.deploy_only))
     runs-on: ubuntu-latest
     permissions:
       contents: write
