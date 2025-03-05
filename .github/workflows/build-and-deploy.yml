@@ -92,7 +92,7 @@ jobs:
 
   setup_build_directory:
     name: Setup Build Directory
-    needs: download_artifacts
+    if: github.event_name != 'repository_dispatch'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -117,7 +117,6 @@ jobs:
       always() && 
       (needs.download_artifacts.result == 'success' || needs.download_artifacts.result == 'skipped') && 
       (needs.setup_build_directory.result == 'success' || needs.setup_build_directory.result == 'skipped') &&
-      (needs.lint.result == 'success' || needs.lint.result == 'skipped') &&
       (github.event_name != 'workflow_dispatch' || !inputs.deploy_only)
     runs-on: ubuntu-latest
     steps:
