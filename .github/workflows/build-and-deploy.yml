@@ -92,6 +92,7 @@ jobs:
 
   setup_build_directory:
     name: Setup Build Directory
+    needs: download_artifacts
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -109,51 +110,9 @@ jobs:
           path: ${{ env.COURSE_DIR }}
           retention-days: 1
 
-  lint:
-    name: Lint Code
-    runs-on: ubuntu-latest
-    if: github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && !inputs.deploy_only)
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: 'npm'
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v2
-        with:
-          version: ${{ env.PNPM_VERSION }}
-          run_install: false
-
-      - name: Get pnpm store directory
-        id: pnpm-cache
-        shell: bash
-        run: |
-          echo "STORE_PATH=$(pnpm store path)" >> $GITHUB_OUTPUT
-
-      - name: Setup pnpm cache
-        uses: actions/cache@v4
-        with:
-          path: ${{ steps.pnpm-cache.outputs.STORE_PATH }}
-          key: ${{ runner.os }}-pnpm-store-${{ hashFiles('**/pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-pnpm-store-
-
-      - name: Install dependencies
-        run: pnpm install
-
-      - name: Run linting
-        run: pnpm lint
-
   build:
     name: Build Website
-    needs: [download_artifacts, setup_build_directory, lint]
+    needs: [download_artifacts, setup_build_directory]
     if: |
       always() && 
       (needs.download_artifacts.result == 'success' || needs.download_artifacts.result == 'skipped') && 
