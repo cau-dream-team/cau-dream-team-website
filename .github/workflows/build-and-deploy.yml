@@ -48,24 +48,24 @@ jobs:
             echo ">> Instance ID Upper: $INSTANCE_ID_UPPER"
 
             # Create temporary directory for this artifact
-            mkdir -p "temp_$artifact_name"
             echo ">> Created temporary directory: temp_$artifact_name"
+            mkdir -p "temp_$artifact_name"
 
             # Download the artifact
-            gh release download --repo cau-dream-team/cau-dream-team-notes --pattern "$artifact_name.zip" --dir "temp_$artifact_name"
             echo ">> Downloaded artifact: $artifact_name.zip"
+            gh release download --repo cau-dream-team/cau-dream-team-notes --pattern "$artifact_name.zip" --dir "temp_$artifact_name"
 
             # Extract the main artifact zip
-            unzip -q "temp_$artifact_name/$artifact_name.zip" -d "temp_$artifact_name"
             echo ">> Extracted main artifact: $artifact_name.zip"
+            unzip -q "temp_$artifact_name/$artifact_name.zip" -d "temp_$artifact_name"
 
             # Extract the webHelp zip
-            unzip -q "temp_$artifact_name/artifacts/webHelp${INSTANCE_ID_UPPER}2-all.zip" -d "${{ env.COURSE_DIR }}/$artifact_name"
             echo ">> Extracted webHelp: webHelp${INSTANCE_ID_UPPER}2-all.zip"
+            unzip -q "temp_$artifact_name/artifacts/webHelp${INSTANCE_ID_UPPER}2-all.zip" -d "${{ env.COURSE_DIR }}/$artifact_name"
 
             # Cleanup temporary files
-            rm -rf "temp_$artifact_name"
             echo ">> Cleaned up temporary files"
+            rm -rf "temp_$artifact_name"
           done
         env:
           GH_TOKEN: ${{ github.token }}
@@ -117,6 +117,11 @@ jobs:
         with:
           name: notes-directory
           path: ${{ env.COURSE_DIR }}
+
+      - name: Display notes directory
+        run: |
+          echo ">> Notes directory:"
+          ls -la ${{ env.COURSE_DIR }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
