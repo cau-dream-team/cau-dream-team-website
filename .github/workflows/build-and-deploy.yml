@@ -56,10 +56,25 @@ jobs:
 
             echo "Found workflow ID: $WORKFLOW_ID"
 
+            # Get artifact information for this workflow run
+            ARTIFACTS_JSON=$(curl -s -H "Authorization: token ${{ secrets.REPO_ACCESS_TOKEN }}" \
+              "https://api.github.com/repos/cau-dream-team/cau-dream-team-notes/actions/runs/$WORKFLOW_ID/artifacts")
+            
+            # Find the artifact ID for this instance
+            ARTIFACT_ID=$(echo "$ARTIFACTS_JSON" | jq -r --arg name "$instance" '.artifacts[] | select(.name==$name) | .id')
+            
+            if [ -z "$ARTIFACT_ID" ] || [ "$ARTIFACT_ID" = "null" ]; then
+              echo "::error::Failed to find artifact ID for instance $instance in workflow $WORKFLOW_ID"
+              echo "Available artifacts: $(echo "$ARTIFACTS_JSON" | jq -r '.artifacts[].name')"
+              exit 1
+            fi
+            
+            echo "Found artifact ID: $ARTIFACT_ID for instance $instance"
+
             # Download the artifact for this instance
             curl -s -L -H "Authorization: token ${{ secrets.REPO_ACCESS_TOKEN }}" \
               -o temp_$instance/artifact.zip \
-              "https://api.github.com/repos/cau-dream-team/cau-dream-team-notes/actions/runs/$WORKFLOW_ID/artifacts/$instance/zip"
+              "https://api.github.com/repos/cau-dream-team/cau-dream-team-notes/actions/runs/$WORKFLOW_ID/artifacts/$ARTIFACT_ID/zip"
             
             if [ ! -s "temp_$instance/artifact.zip" ]; then
               echo "::error::Failed to download artifact for $instance"
