@@ -22,6 +22,8 @@ jobs:
   download_artifacts:
     name: Download Course Artifacts
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     if: github.event_name == 'repository_dispatch'
     steps:
       - name: Checkout repository
