@@ -35,24 +35,33 @@ jobs:
       - name: Download artifacts
         run: |
           # For each artifact name in the payload
+          echo ">> Starting to download artifacts: ${{ github.event.client_payload.artifact_names }}"
           for artifact_name in $(echo '${{ github.event.client_payload.artifact_names }}' | jq -r '.[]'); do
+            echo ">> Artifact name: $artifact_name"
+
             # Convert to uppercase for the zip file name
             INSTANCE_ID_UPPER=$(echo "$artifact_name" | tr '[:lower:]' '[:upper:]')
+            echo ">> Instance ID Upper: $INSTANCE_ID_UPPER"
 
             # Create temporary directory for this artifact
             mkdir -p "temp_$artifact_name"
+            echo ">> Created temporary directory: temp_$artifact_name"
 
             # Download the artifact
             gh release download --repo cau-dream-team/cau-dream-team-notes --pattern "$artifact_name.zip" --dir "temp_$artifact_name"
+            echo ">> Downloaded artifact: $artifact_name.zip"
 
             # Extract the main artifact zip
             unzip -q "temp_$artifact_name/$artifact_name.zip" -d "temp_$artifact_name"
+            echo ">> Extracted main artifact: $artifact_name.zip"
 
             # Extract the webHelp zip
             unzip -q "temp_$artifact_name/artifacts/webHelp${INSTANCE_ID_UPPER}2-all.zip" -d "${{ env.COURSE_DIR }}/$artifact_name"
+            echo ">> Extracted webHelp: webHelp${INSTANCE_ID_UPPER}2-all.zip"
 
             # Cleanup temporary files
             rm -rf "temp_$artifact_name"
+            echo ">> Cleaned up temporary files"
           done
         env:
           GH_TOKEN: ${{ github.token }}
