@@ -12,6 +12,7 @@ env:
 jobs:
   download_artifacts:
     runs-on: ubuntu-latest
+    if: github.event_name == 'repository_dispatch'
     steps:
       - uses: actions/checkout@v4
 
@@ -55,8 +56,25 @@ jobs:
           path: ${{ env.COURSE_DIR }}
           retention-days: 1
 
+  setup_build_directory:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create empty notes directory
+        run: mkdir -p ${{ env.COURSE_DIR }}
+
+      - name: Upload notes directory
+        uses: actions/upload-artifact@v4
+        with:
+          name: notes-directory
+          path: ${{ env.COURSE_DIR }}
+          retention-days: 1
+
   build:
-    needs: download_artifacts
+    needs: [download_artifacts, setup_build_directory]
+    if: always() && (needs.download_artifacts.result == 'success' || needs.download_artifacts.result == 'skipped') && (needs.setup_build_directory.result == 'success' || needs.setup_build_directory.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
