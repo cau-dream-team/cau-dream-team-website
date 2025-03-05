@@ -35,39 +35,11 @@ jobs:
       - name: Download artifacts
         run: |
           set -e
-          # Safely parse the JSON array of artifact names
-          ARTIFACTS="${{ toJSON(github.event.client_payload.artifact_names) }}"
 
-          # Debug output
-          echo "Raw artifact_names: $ARTIFACTS"
+          echo "Client payload: ${{ toJSON(github.event.client_payload) }}"
 
-          # Clean up the JSON string to ensure it's valid
-          ARTIFACTS=$(echo "$ARTIFACTS" | tr -d '\n\r' | tr -s ' ')
-
-          echo "Cleaned artifact_names: $ARTIFACTS"
-
-          # Check if ARTIFACTS is valid JSON
-          if ! echo "$ARTIFACTS" | jq empty 2>/dev/null; then
-            echo "::warning::Invalid JSON in artifact_names, attempting to fix format"
-            
-            # Check if it's a comma-separated string and convert to JSON array
-            if [[ "$ARTIFACTS" == *","* ]] && [[ "$ARTIFACTS" != *"["* ]]; then
-              echo "Detected comma-separated string, converting to JSON array"
-              ARTIFACTS="[$(echo "$ARTIFACTS" | sed 's/,/","/g')]"
-            else
-              # Try to extract array elements even if the overall format is incorrect
-              # This assumes the artifact names themselves are valid
-              ARTIFACTS=$(echo "$ARTIFACTS" | grep -o '"[^"]*"' | jq -R . | jq -s .)
-            fi
-            
-            if ! echo "$ARTIFACTS" | jq empty 2>/dev/null; then
-              echo "::error::Failed to parse artifact_names even after cleanup"
-              exit 1
-            fi
-          fi
-
-          # Process each artifact
-          for instance in $(echo "$ARTIFACTS" | jq -r '.[]'); do
+          # Get the artifact names
+          for instance in $(echo '${{ toJSON(github.event.client_payload.artifact_names) }}' | jq -r '.[]'); do
             echo "::group::Downloading artifact for $instance"
             # Create a temporary directory for each artifact
             mkdir -p temp_$instance
@@ -121,7 +93,6 @@ jobs:
   setup_build_directory:
     name: Setup Build Directory
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
