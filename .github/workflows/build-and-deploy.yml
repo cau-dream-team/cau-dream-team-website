@@ -23,20 +23,20 @@ jobs:
 
       - name: List releases
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           echo "➡️ Available releases:"
           gh release list --repo cau-dream-team/cau-dream-team-notes
 
       - name: Download artifacts
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.PAT_TOKEN }}
         run: |
           echo "➡️ Downloading artifacts"
           mkdir -p ${{ env.COURSE_DIR }}
           for instance in cp cv ah kl kp; do
             echo "➡️ Downloading artifact for instance: $instance"
-            gh release download --repo cau-dream-team/cau-dream-team-notes --pattern "webHelp$(echo $instance | tr '[:lower:]' '[:upper:]')2-all.zip" --dir ${{ env.COURSE_DIR }} --latest
+            gh release download --repo cau-dream-team/cau-dream-team-notes --pattern "webHelp$(echo $instance | tr '[:lower:]' '[:upper:]')2-all.zip" --dir ${{ env.COURSE_DIR }}
           done
 
       - name: Extract artifacts
