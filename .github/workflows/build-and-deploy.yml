@@ -5,13 +5,6 @@ on:
     branches: ['main']
   repository_dispatch:
     types: [update_notes]
-  workflow_dispatch:
-    inputs:
-      deploy_only:
-        description: 'Skip build and deploy only'
-        type: 'boolean'
-        default: false
-        required: false
 
 env:
   COURSE_DIR: public/courses
@@ -24,73 +17,30 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    if: github.event_name == 'repository_dispatch'
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Create notes directory
-        run: mkdir -p ${{ env.COURSE_DIR }}
 
       - name: Download artifacts
-        run: |
-          echo ">> Starting to download artifacts"
-
-          # Parse the JSON array directly from the client payload
-          artifact_names='${{ toJson(github.event.client_payload.artifact_names) }}'
-          echo ">> Artifact names: $artifact_names"
-
-          for artifact_name in $(echo "$artifact_names" | jq -r '.[]'); do
-            echo ">> Processing artifact: $artifact_name"
-
-            # Convert to uppercase for the zip file name
-            INSTANCE_ID_UPPER=$(echo "$artifact_name" | tr '[:lower:]' '[:upper:]')
-            echo ">> Instance ID Upper: $INSTANCE_ID_UPPER"
-
-            # Create temporary directory for this artifact
-            echo ">> Created temporary directory: temp_$artifact_name"
-            mkdir -p "temp_$artifact_name"
-
-            # Download the artifact
-            echo ">> Downloaded artifact: $artifact_name.zip"
-            gh release download --repo cau-dream-team/cau-dream-team-notes --pattern "$artifact_name.zip" --dir "temp_$artifact_name"
-
-            # Extract the main artifact zip
-            echo ">> Extracted main artifact: $artifact_name.zip"
-            unzip -q "temp_$artifact_name/$artifact_name.zip" -d "temp_$artifact_name"
-
-            # Extract the webHelp zip
-            echo ">> Extracted webHelp: webHelp${INSTANCE_ID_UPPER}2-all.zip"
-            unzip -q "temp_$artifact_name/artifacts/webHelp${INSTANCE_ID_UPPER}2-all.zip" -d "${{ env.COURSE_DIR }}/$artifact_name"
-
-            # Cleanup temporary files
-            echo ">> Cleaned up temporary files"
-            rm -rf "temp_$artifact_name"
-          done
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "➡️ Downloading artifacts"
+          mkdir -p ${{ env.COURSE_DIR }}
+          for instance in cp cv ah kl kp; do
+            echo "➡️ Downloading artifact for instance: $instance"
+            gh release download --repo cau-dream-team/cau-dream-team-notes --pattern "webHelp$(echo $instance | tr '[:lower:]' '[:upper:]')2-all.zip" --dir ${{ env.COURSE_DIR }}
+          done
 
-      - name: Upload notes directory
-        uses: actions/upload-artifact@v4
-        with:
-          name: notes-directory
-          path: ${{ env.COURSE_DIR }}
-          retention-days: 1
-
-  setup_build_directory:
-    name: Setup Build Directory
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Create empty notes directory
-        run: mkdir -p ${{ env.COURSE_DIR }}
+      - name: Extract artifacts
+        run: |
+          echo "➡️ Extracting artifacts"
+          for zip in ${{ env.COURSE_DIR }}/*.zip; do
+            instance=$(basename $zip .zip | sed 's/webHelp//;s/2-all//' | tr '[:upper:]' '[:lower:]')
+            echo "➡️ Extracting $instance"
+            unzip -q $zip -d ${{ env.COURSE_DIR }}/$instance
+            rm $zip
+          done
 
       - name: Upload notes directory
         uses: actions/upload-artifact@v4
@@ -101,18 +51,11 @@ jobs:
 
   build:
     name: Build Website
-    needs: [download_artifacts, setup_build_directory]
-    if: |
-      always() && 
-      (needs.download_artifacts.result == 'success' || needs.download_artifacts.result == 'skipped') && 
-      (needs.setup_build_directory.result == 'success' || needs.setup_build_directory.result == 'skipped') &&
-      (github.event_name != 'workflow_dispatch' || !inputs.deploy_only)
+    needs: download_artifacts
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
       - name: Download notes directory
         uses: actions/download-artifact@v4
@@ -122,8 +65,8 @@ jobs:
 
       - name: Display notes directory
         run: |
-          echo ">> Notes directory:"
-          ls -la ${{ env.COURSE_DIR }}
+          echo "➡️ Notes directory:"
+          ls -R ${{ env.COURSE_DIR }}
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -153,7 +96,9 @@ jobs:
         run: pnpm install
 
       - name: Build website
-        run: pnpm build
+        run: |
+          echo "➡️ Building website"
+          pnpm build
 
       - name: Upload build output
         uses: actions/upload-artifact@v4
@@ -165,32 +110,18 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
-    if: always() && (needs.build.result == 'success' || (github.event_name == 'workflow_dispatch' && inputs.deploy_only))
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - name: Checkout repository
-        if: github.event_name == 'workflow_dispatch' && inputs.deploy_only
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
 
       - name: Download build output
-        if: github.event_name != 'workflow_dispatch' || !inputs.deploy_only
         uses: actions/download-artifact@v4
         with:
           name: build-output
           path: ./out
-
-      - name: Download previous build
-        if: github.event_name == 'workflow_dispatch' && inputs.deploy_only
-        uses: actions/checkout@v4
-        with:
-          repository: cau-dream-team/cau-dream-team.github.io
-          ssh-key: ${{ secrets.DEPLOY_KEY }}
-          path: ./out
-          fetch-depth: 1
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
@@ -199,4 +130,6 @@ jobs:
           external_repository: cau-dream-team/cau-dream-team.github.io
           publish_dir: ./out
           publish_branch: main
-          commit_message: ${{ github.event_name == 'repository_dispatch' && 'Update course notes' || 'Update website from main branch' }}
+
+      - name: Log deployment status
+        run: echo "➡️ Deployment to GitHub Pages completed"
