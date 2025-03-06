@@ -21,6 +21,11 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: List releases
+        run: |
+          echo "➡️ Available releases:"
+          gh release list --repo cau-dream-team/cau-dream-team-notes
+
       - name: Download artifacts
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -29,7 +34,7 @@ jobs:
           mkdir -p ${{ env.COURSE_DIR }}
           for instance in cp cv ah kl kp; do
             echo "➡️ Downloading artifact for instance: $instance"
-            gh release download --repo cau-dream-team/cau-dream-team-notes --pattern "webHelp$(echo $instance | tr '[:lower:]' '[:upper:]')2-all.zip" --dir ${{ env.COURSE_DIR }}
+            gh release download --repo cau-dream-team/cau-dream-team-notes --pattern "webHelp$(echo $instance | tr '[:lower:]' '[:upper:]')2-all.zip" --dir ${{ env.COURSE_DIR }} --latest
           done
 
       - name: Extract artifacts
