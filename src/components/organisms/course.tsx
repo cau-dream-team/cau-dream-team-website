@@ -13,7 +13,7 @@ export const Course = ({ code, name }: { code: string; name: string }) => {
 
   const updateSize = useCallback(() => {
     setDimensions({
-      height: `${window.innerHeight}px`,
+      height: `${window.innerHeight - 1}px`,
       width: `${window.innerWidth}px`,
     });
   }, []);
@@ -36,7 +36,7 @@ export const Course = ({ code, name }: { code: string; name: string }) => {
       <Iframe
         url=""
         src={`/courses/${code}/${name}.html`}
-        className="w-full border-0"
+        className="w-full overflow-hidden border-0"
         height={dimensions.height}
         width={dimensions.width}
         title={`Course: ${name}`}

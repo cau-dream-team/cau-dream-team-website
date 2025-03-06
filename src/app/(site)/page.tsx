@@ -1,42 +1,19 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { ThemeButton } from '@/components/atoms/theme-button';
+import { CourseSelection } from '@/components/course/course-selection';
 import { Separator } from '@/components/ui/separator';
-import { Moon, Sun } from 'lucide-react';
-import { useTheme, type UseThemeProps } from 'next-themes';
-import { useState } from 'react';
 
 const RootPage = () => {
-  const { theme, setTheme }: UseThemeProps = useTheme();
-
-  const [inputValue, setInputValue] = useState<string>('');
-  const [name, setName] = useState<string>('');
-
   return (
-    <>
-      <div className="flex flex-col items-center gap-5">
-        <h1 className="text-xl font-bold">Enter your name</h1>
-        <div className="flex items-center gap-5">
-          <Input
-            placeholder="Name"
-            value={inputValue || ''}
-            onChange={e => setInputValue(e.target.value)}
-          />
-          <Button onClick={() => setName(inputValue)}>Submit</Button>
-        </div>
+    <div className="w-full">
+      <h1 className="text-center text-2xl font-bold">Select your course</h1>
+      <div className="mx-auto my-5 w-96">
         <Separator />
-        <h1 className="text-4xl font-bold">{name ? `Hello ${name}` : 'Hello World'}</h1>
       </div>
-      <Button
-        variant="ghost"
-        size="icon"
-        onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-        className="absolute top-5 right-5"
-      >
-        {theme === 'light' ? <Sun /> : <Moon />}
-      </Button>
-    </>
+      <CourseSelection orientation="vertical" className="flex-col md:flex-row" />
+      <ThemeButton />
+    </div>
   );
 };
 
