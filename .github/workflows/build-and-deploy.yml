@@ -45,7 +45,7 @@ jobs:
           for zip in ${{ env.COURSE_DIR }}/*.zip; do
             instance=$(basename $zip .zip | sed 's/webHelp//;s/2-all//' | tr '[:upper:]' '[:lower:]')
             echo "➡️ Extracting $instance"
-            unzip -q $zip -d ${{ env.COURSE_DIR }}/$instance
+            unzip -o $zip -d ${{ env.COURSE_DIR }}/$instance
             rm $zip
           done
 
