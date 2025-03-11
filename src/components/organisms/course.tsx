@@ -13,11 +13,9 @@ export const Course = ({ code, name }: { code: string; name: string }) => {
 
   const updateSize = useCallback(() => {
     const height = window.innerHeight;
-    const width = window.innerWidth;
-    const isMobile = width <= 768;
 
     setDimensions({
-      height: `${height - (isMobile ? 56 : 64)}px`,
+      height: `${height - 1}px`,
       width: '100%',
     });
   }, []);
