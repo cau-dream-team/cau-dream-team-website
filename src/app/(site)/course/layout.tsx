@@ -5,7 +5,7 @@ const CourseLayout = ({ children }: { children: ReactNode }) => {
   return (
     <div className="h-full w-full">
       {children}
-      <div className="absolute top-[30px] left-1/2 -translate-x-1/2 transform">
+      <div className="absolute top-0 right-0 left-0 flex h-[48px] place-items-center justify-center md:h-[70px]">
         <HomeButton />
       </div>
     </div>
